@@ -1,0 +1,309 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:         #070710;
+  --amber:      #e8b76a;
+  --amber-dim:  #9c7440;
+  --amber-glow: rgba(232, 183, 106, 0.18);
+  --text:       #c4bcb0;
+  --text-dim:   #5a5450;
+  --green:      #2d6e47;
+  --green-glow: rgba(45, 110, 71, 0.45);
+  --red:        #7a2828;
+  --red-glow:   rgba(122, 40, 40, 0.45);
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  overflow: hidden;
+  /* subtle radial vignette */
+  background-image: radial-gradient(ellipse 80% 60% at 50% 20%, rgba(232,183,106,0.04) 0%, transparent 70%);
+}
+
+/* ── Scanline texture ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    rgba(0,0,0,0.06) 3px,
+    rgba(0,0,0,0.06) 4px
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.call-screen {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: 100vh;
+  padding: 72px 32px 56px;
+}
+
+/* ── Caller section ── */
+.caller-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ── Avatar ── */
+.avatar-ring {
+  position: relative;
+  width: 148px;
+  height: 148px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-glow {
+  position: absolute;
+  inset: -28px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--amber-glow) 0%, transparent 68%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+/* Outer decorative ring */
+.avatar-ring::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px solid var(--amber-dim);
+  opacity: 0.25;
+  transition: opacity 0.4s, border-color 0.4s;
+}
+
+.avatar-ring[data-phase="listening"]::before {
+  opacity: 0.35;
+}
+
+.avatar-ring[data-phase="processing"]::before {
+  border-color: var(--amber-dim);
+  opacity: 0.5;
+  animation: spin 2.4s linear infinite;
+  /* dashed via clip? use border-style instead */
+  border-style: dashed;
+}
+
+.avatar-ring[data-phase="responding"]::before {
+  border-color: var(--amber);
+  opacity: 0.8;
+  animation: pulse-ring 1.8s ease-in-out infinite;
+}
+
+.avatar-ring[data-phase="responding"] .avatar-glow {
+  opacity: 0.7;
+  animation: pulse-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes pulse-ring {
+  0%, 100% { transform: scale(1);    opacity: 0.8; }
+  50%       { transform: scale(1.07); opacity: 0.3; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.7; }
+  50%       { opacity: 0.25; }
+}
+
+.avatar-core {
+  width: 148px;
+  height: 148px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 36%, #201a12 0%, #0d0a07 100%);
+  border: 1px solid rgba(232, 183, 106, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cormorant Garant', Georgia, serif;
+  font-size: 58px;
+  font-weight: 300;
+  font-style: italic;
+  color: var(--amber);
+  user-select: none;
+  position: relative;
+  z-index: 1;
+  letter-spacing: -1px;
+}
+
+.caller-name {
+  font-family: 'Cormorant Garant', Georgia, serif;
+  font-size: 30px;
+  font-weight: 300;
+  color: var(--text);
+  letter-spacing: 3px;
+}
+
+.call-status {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  min-height: 14px;
+}
+
+.call-timer {
+  font-size: 13px;
+  color: var(--amber-dim);
+  letter-spacing: 4px;
+}
+
+/* ── Visualizer ── */
+.visualizer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5px;
+  height: 60px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.bar {
+  flex: 1;
+  max-width: 9px;
+  background: linear-gradient(to top, var(--amber-dim), var(--amber));
+  border-radius: 2px;
+  height: 3px;
+  opacity: 0.2;
+  transition: height 0.07s ease, opacity 0.07s ease;
+}
+
+/* ── Silence bar ── */
+.silence-bar {
+  width: 100%;
+  max-width: 256px;
+  text-align: center;
+}
+
+.silence-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+}
+
+.silence-progress {
+  width: 100%;
+  height: 1.5px;
+  background: rgba(232, 183, 106, 0.1);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.silence-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--amber-dim);
+  border-radius: 1px;
+  transition: width 0.08s linear;
+}
+
+/* ── Controls ── */
+.controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 52px;
+}
+
+.ctrl-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.2s, transform 0.15s;
+}
+
+.ctrl-btn:active { transform: scale(0.91); }
+
+.ctrl-label {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Force-listen button */
+.listen-btn { opacity: 0.65; }
+.listen-btn:hover { opacity: 1; }
+
+.listen-icon-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 1px solid rgba(232, 183, 106, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--amber-dim);
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.listen-btn:hover .listen-icon-wrap {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.listen-icon-wrap svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* Call / hangup button */
+.call-btn {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 28px var(--green-glow);
+  color: #e8f4ee;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.35s, box-shadow 0.35s, transform 0.15s;
+}
+
+.call-btn.hanging {
+  background: var(--red);
+  box-shadow: 0 0 28px var(--red-glow);
+}
+
+.call-btn svg {
+  width: 30px;
+  height: 30px;
+}
+
+.call-btn:active { transform: scale(0.9); }
+
+/* Hide the text label inside the call button */
+.call-btn .ctrl-label { display: none; }

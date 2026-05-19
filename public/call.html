@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Call · October</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garant:ital,wght@0,300;0,500;1,300&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/call.css" />
+  </head>
+  <body>
+    <div class="call-screen">
+
+      <div class="caller-section">
+        <div class="avatar-ring" id="avatarRing" data-phase="idle">
+          <div class="avatar-glow" id="avatarGlow"></div>
+          <div class="avatar-core">O</div>
+        </div>
+        <div class="caller-name">October</div>
+        <div class="call-status" id="callStatus">等待接通…</div>
+        <div class="call-timer" id="callTimer">--:--</div>
+      </div>
+
+      <div class="visualizer" id="visualizer"></div>
+
+      <div class="silence-bar" id="silenceBar" hidden>
+        <div class="silence-label">自动发送 <span id="silenceCountdown">5</span>s</div>
+        <div class="silence-progress">
+          <div class="silence-fill" id="silenceFill"></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="ctrl-btn listen-btn" id="listenBtn" hidden title="强制让她听">
+          <div class="listen-icon-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </div>
+          <span class="ctrl-label">让她听</span>
+        </button>
+
+        <button class="ctrl-btn call-btn" id="callBtn" title="接听 / 挂断">
+          <svg id="callBtnIcon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24
+                     1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17
+                     0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25
+                     1.02l-2.2 2.2z"/>
+          </svg>
+          <span class="ctrl-label" id="callBtnLabel">接听</span>
+        </button>
+      </div>
+
+    </div>
+    <script type="module" src="/call.js"></script>
+  </body>
+</html>

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>October · MyVoice</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="app">
+
+      <header class="chat-header">
+        <div class="header-avatar">O</div>
+        <div class="header-info">
+          <div class="header-name">October</div>
+          <div class="header-status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Connecting…</span>
+          </div>
+        </div>
+        <a href="/call.html" class="call-nav-btn" title="打电话给 October">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24
+                     1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17
+                     0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25
+                     1.02l-2.2 2.2z"/>
+          </svg>
+        </a>
+      </header>
+
+      <div class="messages" id="messages"></div>
+
+      <div class="input-bar">
+        <form id="textForm" class="text-form-inner">
+          <input id="textInput" type="text" placeholder="Message October…" autocomplete="off" />
+          <button type="submit" class="send-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </form>
+        <button id="micBtn" class="mic-btn" title="Hold to talk">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
