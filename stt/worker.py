@@ -54,12 +54,15 @@ def main():
 
 
 def transcribe(model, audio_file, language, beam_size):
+    # initial_prompt gives Whisper prior context so the first token is well-anchored
+    prompt = "以下是普通话口语对话内容。" if (language or '').startswith('zh') else None
     segments, _info = model.transcribe(
         audio_file,
         language=language,
         vad_filter=False,
         beam_size=beam_size,
         no_speech_threshold=0.8,
+        initial_prompt=prompt,
     )
     return "".join(segment.text for segment in segments).strip()
 

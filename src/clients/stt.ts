@@ -41,15 +41,29 @@ export async function transcribeAudio(filePath: string): Promise<string> {
   });
 
   return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (!sttWorker.pending.has(id)) return;
+      sttWorker.pending.delete(id);
+      // Kill the frozen worker so the next request spawns a fresh one
+      sttWorker.child.kill();
+      worker = null;
+      reject(new Error('STT timeout — Whisper took too long, please try again'));
+    }, 12000);
+
     sttWorker.pending.set(id, {
       resolve: (text) => {
+        clearTimeout(timer);
         console.log(`STT result: ${size} bytes, ${Math.round(performance.now() - startedAt)}ms, text=${JSON.stringify(text)}`);
         resolve(text);
       },
-      reject,
+      reject: (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
     });
     sttWorker.child.stdin.write(`${payload}\n`, (err) => {
       if (!err) return;
+      clearTimeout(timer);
       sttWorker.pending.delete(id);
       reject(err);
     });
