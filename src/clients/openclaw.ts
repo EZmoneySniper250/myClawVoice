@@ -69,9 +69,8 @@ export async function streamOpenClaw(
   signal?: AbortSignal,
 ) {
   const base = config.openclaw.baseUrl.replace(/\/$/, '');
-  const res = await fetch(`${base}/v1/chat/completions`, {
+  const requestInit: RequestInit = {
     method: 'POST',
-    signal,
     headers: {
       ...authHeaders(),
       accept: 'text/event-stream',
@@ -85,7 +84,10 @@ export async function streamOpenClaw(
       user: config.openclaw.sessionKey,
       messages: buildMessages(userText, history),
     }),
-  });
+  };
+  if (signal) requestInit.signal = signal;
+
+  const res = await fetch(`${base}/v1/chat/completions`, requestInit);
 
   if (!res.ok || !res.body) {
     const text = await res.text();

@@ -254,6 +254,7 @@ export function useCall() {
 
       if (rms > VOICE_THRESHOLD) {
         // Recorder already running from initRecorder() — just mark voice detected
+        if (!r.current.hasCaptured) r.current.returnGen++; // cancel stale return-to-listening timer
         r.current.hasCaptured    = true;
         r.current.lastVoiceTime  = Date.now();
         setSilence(0);

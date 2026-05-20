@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 const HISTORY_KEY = 'myvoice:messages';
 const MAX_STORED  = 500;
@@ -9,7 +9,9 @@ export type StoredMessage = {
   timestamp?: number;
 };
 
-function makeClient(): Redis | null {
+type RedisClient = InstanceType<typeof Redis>;
+
+function makeClient(): RedisClient | null {
   try {
     const client = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
       lazyConnect: true,
@@ -30,7 +32,7 @@ export async function loadRecent(count = 50): Promise<StoredMessage[]> {
   if (!client) return [];
   try {
     const items = await client.lrange(HISTORY_KEY, -count, -1);
-    return items.map(s => JSON.parse(s) as StoredMessage);
+    return items.map((s: string) => JSON.parse(s) as StoredMessage);
   } catch {
     return [];
   }
@@ -40,7 +42,7 @@ export async function loadAll(limit = 300): Promise<StoredMessage[]> {
   if (!client) return [];
   try {
     const items = await client.lrange(HISTORY_KEY, -limit, -1);
-    return items.map(s => JSON.parse(s) as StoredMessage);
+    return items.map((s: string) => JSON.parse(s) as StoredMessage);
   } catch {
     return [];
   }

@@ -232,3 +232,14 @@ npm run dev:client   # 前端：http://localhost:5173（自动代理到后端）
 
 **Q：更换助手名称后前端没变化**
 修改 `.env` 中的 `AGENT_NAME` 后需重启服务：`docker compose restart app`。
+
+## 1.5新增 挂断词
+当你觉得你的agent太烦了 你只要说这些词就行了 他会自动退出
+
+  中文：                                                                                                                        
+  - 休息 再见 拜拜 拜了 挂断 挂了 挂机                                                                                          
+  - 退出 结束通话 结束对话 不说了 不聊了  
+  - 走了 走啦 先走了 下线                                                                                                       
+                                                                                                                                
+  英文：                                                                                                                        
+  - goodbye bye bye hang up disconnect  
