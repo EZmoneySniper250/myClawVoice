@@ -5,6 +5,7 @@ WORKDIR /app/client
 COPY client/package*.json ./
 RUN npm ci
 COPY client/ ./
+COPY public/ ../public/
 RUN npm run build
 
 # ── Stage 2: 编译后端 TypeScript ─────────────────────────────────────────────

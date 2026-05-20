@@ -1,21 +1,20 @@
-import { useState, useRef, useEffect } from 'react';
+﻿import { useState, useRef, useEffect } from 'react';
 
-const VOICE_THRESHOLD     = 0.015;
+const VOICE_THRESHOLD     = 0.025;
 const INTERRUPT_THRESHOLD = 0.09;   // must be loud speech, not background noise
-const INTERRUPT_TICKS     = 7;      // must sustain for 7 × 80ms = 560ms
-const SILENCE_MS      = 1000;   // 1s silence → auto-submit
+const INTERRUPT_TICKS     = 7;      // must sustain for 7 脳 80ms = 560ms
+const SILENCE_MS      = 1600;   // silence before auto-submit
 const VAD_INTERVAL_MS = 80;
 const MIN_AUDIO_BYTES = 2048;
+const MAX_RECORDING_MS = 12000;
 
-// ── Auto-disconnect constants ─────────────────────────────────────────────────
+// 鈹€鈹€ Auto-disconnect constants 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 const IDLE_TIMEOUT_MS = 3 * 60 * 1000; // 3 min of no user speech after October finishes
 const IDLE_WARN_S     = 30;             // show countdown for last 30 s
 
 // Phrases that immediately hang up (checked after STT, before sending to LLM)
 const HANGUP_PHRASES = [
-  '休息', '再见', '拜拜', '拜了', '挂断', '挂了', '挂机',
-  '退出', '结束通话', '结束对话', '不说了', '不聊了',
-  '走了', '走啦', '先走了', '下线',
+  '挂断', '挂了', '结束通话', '断开', '再见', '拜拜',
   'goodbye', 'bye bye', 'hang up', 'disconnect',
 ];
 
@@ -46,7 +45,7 @@ function calcRms(data) {
 }
 
 export function useCall() {
-  // ── React state (drives UI re-renders) ──────────────────────────────────
+  // 鈹€鈹€ React state (drives UI re-renders) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   const [phase, setPhase]               = useState('idle');
   const [transcript, setTranscript]     = useState([]);
   const [currentResponse, setCurrent]   = useState('');
@@ -54,7 +53,7 @@ export function useCall() {
   const [agentName, setAgentName]       = useState('October');
   const [idleCountdown, setIdleCountdown] = useState(0); // >0 = warning active
 
-  // ── Single mutable ref bucket (safe in async callbacks via r.current) ──
+  // 鈹€鈹€ Single mutable ref bucket (safe in async callbacks via r.current) 鈹€鈹€
   const r = useRef({
     phase:            'idle',
     micStream:        null,
@@ -66,6 +65,7 @@ export function useCall() {
     chunks:           [],
     hasCaptured:      false,
     lastVoiceTime:    0,
+    voiceStartedAt:   0,
     ws:               null,
     nextPlayTime:     0,
     activeSources:    [],
@@ -80,16 +80,16 @@ export function useCall() {
     returnGen:        0,   // incremented on each new turn; stale timers check this
   });
 
-  // Exposed to OrbScene for animation — updated in VAD, never triggers re-renders
+  // Exposed to OrbScene for animation 鈥?updated in VAD, never triggers re-renders
   const rmsLevelRef = useRef(0);
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+  // 鈹€鈹€ Helpers 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   function syncPhase(p) {
     r.current.phase = p;
     setPhase(p);
   }
 
-  // ── Idle-disconnect timer ─────────────────────────────────────────────────
+  // 鈹€鈹€ Idle-disconnect timer 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   function disarmIdleTimer() {
     clearTimeout(r.current.idleTimer);
     clearTimeout(r.current.idleWarnTimer);
@@ -173,12 +173,13 @@ export function useCall() {
     }, remainingMs + 300);
   }
 
-  // ── Recorder ─────────────────────────────────────────────────────────────
+  // 鈹€鈹€ Recorder 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   function initRecorder() {
     r.current.chunks        = [];
     r.current.preRoll       = [];   // circular 3-chunk buffer (~600ms pre-VAD audio)
     r.current.hasCaptured   = false;
     r.current.lastVoiceTime = 0;
+    r.current.voiceStartedAt = 0;
     setSilence(0);
 
     if (!r.current.micStream) return;
@@ -190,10 +191,10 @@ export function useCall() {
     recorder.ondataavailable = (e) => {
       if (!e.data.size) return;
       if (r.current.hasCaptured) {
-        // Voice detected — accumulate real speech chunks
+        // Voice detected 鈥?accumulate real speech chunks
         r.current.chunks.push(e.data);
       } else {
-        // No voice yet — maintain rolling pre-roll (keep last 3 chunks ≈ 600ms)
+        // No voice yet 鈥?maintain rolling pre-roll (keep last 3 chunks 鈮?600ms)
         r.current.preRoll.push(e.data);
         if (r.current.preRoll.length > 3) r.current.preRoll.shift();
       }
@@ -209,17 +210,20 @@ export function useCall() {
       const blob = new Blob([...preRoll, ...chunks], { type: recorder.mimeType || 'audio/webm' });
       r.current.preRoll = [];
       if (blob.size < MIN_AUDIO_BYTES) {
-        if (r.current.phase !== 'idle') initRecorder();
+        if (r.current.phase !== 'idle') {
+          syncPhase('listening');
+          initRecorder();
+        }
         return;
       }
       await submitAudio(blob);
     };
 
-    // Start immediately — collect pre-roll before the user begins speaking
+    // Start immediately 鈥?collect pre-roll before the user begins speaking
     recorder.start(200);
   }
 
-  // ── VAD ───────────────────────────────────────────────────────────────────
+  // 鈹€鈹€ VAD 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   function startVAD() {
     r.current.vadTimer = setInterval(() => {
       const { analyser, vadData, phase: p, recorder, hasCaptured, lastVoiceTime } = r.current;
@@ -243,8 +247,9 @@ export function useCall() {
             stopPlayback();
             syncPhase('listening');
             initRecorder();
-            r.current.hasCaptured   = true;
-            r.current.lastVoiceTime = Date.now();
+            r.current.hasCaptured    = true;
+        if (!r.current.voiceStartedAt) r.current.voiceStartedAt = Date.now();
+        r.current.lastVoiceTime  = Date.now();
           }
         } else {
           r.current.interruptCount = 0;
@@ -253,27 +258,37 @@ export function useCall() {
       }
 
       if (rms > VOICE_THRESHOLD) {
-        // Recorder already running from initRecorder() — just mark voice detected
+        // Recorder already running from initRecorder() 鈥?just mark voice detected
         if (!r.current.hasCaptured) r.current.returnGen++; // cancel stale return-to-listening timer
         r.current.hasCaptured    = true;
+        if (!r.current.voiceStartedAt) r.current.voiceStartedAt = Date.now();
         r.current.lastVoiceTime  = Date.now();
         setSilence(0);
-        disarmIdleTimer(); // user is speaking — cancel auto-disconnect
+        disarmIdleTimer(); // user is speaking - cancel auto-disconnect
+        if (Date.now() - r.current.voiceStartedAt >= MAX_RECORDING_MS && recorder?.state === 'recording') {
+          submitCurrentRecording();
+        }
       } else if (hasCaptured && recorder?.state === 'recording') {
         const elapsed   = Date.now() - lastVoiceTime;
+        const recordingElapsed = r.current.voiceStartedAt ? Date.now() - r.current.voiceStartedAt : 0;
         const progress  = elapsed / SILENCE_MS;
         setSilence(Math.min(progress, 1));
 
-        if (elapsed >= SILENCE_MS) {
-          setSilence(0);
-          recorder.requestData();
-          recorder.stop();
-        }
+        if (elapsed >= SILENCE_MS || recordingElapsed >= MAX_RECORDING_MS) submitCurrentRecording();
       }
     }, VAD_INTERVAL_MS);
   }
+  function submitCurrentRecording() {
+    const recorder = r.current.recorder;
+    if (r.current.phase !== 'listening' || recorder?.state !== 'recording') return;
+    setSilence(0);
+    syncPhase('processing');
+    recorder.requestData();
+    recorder.stop();
+  }
 
-  // ── Audio submit → STT → LLM ─────────────────────────────────────────────
+
+  // 鈹€鈹€ Audio submit 鈫?STT 鈫?LLM 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   async function submitAudio(blob) {
     syncPhase('processing');
 
@@ -306,14 +321,20 @@ export function useCall() {
 
   function sendViaWS(text) {
     const ws = r.current.ws;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      if (r.current.phase !== 'idle') {
+        syncPhase('listening');
+        initRecorder();
+      }
+      return;
+    }
     r.current.returnGen++; // cancel any pending return-to-listening from previous turn
     setCurrent('');
     resetAudioQueue();
     ws.send(JSON.stringify({ type: 'chat_text', text }));
   }
 
-  // ── WebSocket (always connected for text chat) ────────────────────────────
+  // 鈹€鈹€ WebSocket (always connected for text chat) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   useEffect(() => {
     let dead = false;
 
@@ -383,7 +404,7 @@ export function useCall() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Public API ────────────────────────────────────────────────────────────
+  // 鈹€鈹€ Public API 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   async function startCall() {
     if (r.current.micStream) return;       // already in a call
     if (r.current.phase !== 'idle') return;
@@ -446,8 +467,7 @@ export function useCall() {
     sendInterrupt();
     stopPlayback();
     if (r.current.hasCaptured && r.current.recorder?.state === 'recording') {
-      r.current.recorder.requestData();
-      r.current.recorder.stop();
+      submitCurrentRecording();
     } else {
       syncPhase('listening');
       initRecorder();
@@ -477,3 +497,8 @@ export function useCall() {
     resetIdle: disarmIdleTimer,
   };
 }
+
+
+
+
+

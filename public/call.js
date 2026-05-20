@@ -12,11 +12,12 @@ const listenBtn       = document.getElementById('listenBtn');
 const callBtn         = document.getElementById('callBtn');
 const callBtnLabel    = document.getElementById('callBtnLabel');
 
-const VOICE_THRESHOLD = 0.015;   // RMS level that counts as speech
-const SILENCE_MS      = 5000;    // ms of silence before auto-submit
+const VOICE_THRESHOLD = 0.025;   // RMS level that counts as speech
+const SILENCE_MS      = 1600;    // ms of silence before auto-submit
 const VAD_INTERVAL_MS = 80;
 const BAR_COUNT       = 28;
 const MIN_AUDIO_BYTES = 2048;
+const MAX_RECORDING_MS = 12000;
 
 // ── State ────────────────────────────────────────────────────────────────────
 let phase          = 'idle';   // idle | listening | processing | responding
@@ -29,6 +30,7 @@ let mediaRecorder  = null;
 let chunks         = [];
 let hasCapturedVoice = false;
 let lastVoiceTime  = 0;
+let voiceStartedAt = 0;
 let vadTimer       = null;
 let callStartTime  = null;
 let timerInterval  = null;
@@ -53,8 +55,7 @@ callBtn.addEventListener('click', () => {
 listenBtn.addEventListener('click', () => {
   stopPlayback();
   if (hasCapturedVoice && mediaRecorder?.state === 'recording') {
-    mediaRecorder.requestData();
-    mediaRecorder.stop();   // onstop will submit
+    submitCurrentRecording();
   } else if (phase !== 'processing') {
     setPhase('listening');
     initRecorder();
@@ -121,6 +122,7 @@ function initRecorder() {
   chunks = [];
   hasCapturedVoice = false;
   lastVoiceTime = 0;
+  voiceStartedAt = 0;
   silenceBarEl.hidden = true;
 
   const mimeType = pickMimeType();
@@ -135,7 +137,7 @@ function initRecorder() {
     }
     const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
     if (blob.size < MIN_AUDIO_BYTES) {
-      if (phase !== 'idle') initRecorder();
+      if (phase !== 'idle') { setPhase('listening'); initRecorder(); }
       return;
     }
     await submitAudio(blob);
@@ -159,10 +161,15 @@ function startVAD() {
     if (rms > VOICE_THRESHOLD) {
       if (mediaRecorder?.state === 'inactive') mediaRecorder.start(200);
       hasCapturedVoice = true;
+      if (!voiceStartedAt) voiceStartedAt = Date.now();
       lastVoiceTime = Date.now();
       silenceBarEl.hidden = true;
+      if (Date.now() - voiceStartedAt >= MAX_RECORDING_MS && mediaRecorder?.state === 'recording') {
+        submitCurrentRecording();
+      }
     } else if (hasCapturedVoice && mediaRecorder?.state === 'recording') {
       const elapsed = Date.now() - lastVoiceTime;
+      const recordingElapsed = voiceStartedAt ? Date.now() - voiceStartedAt : 0;
       const remaining = Math.max(0, SILENCE_MS - elapsed);
       const progress  = elapsed / SILENCE_MS;
 
@@ -170,13 +177,18 @@ function startVAD() {
       silenceCountEl.textContent = Math.ceil(remaining / 1000);
       silenceFillEl.style.width = `${Math.min(progress * 100, 100)}%`;
 
-      if (elapsed >= SILENCE_MS) {
-        silenceBarEl.hidden = true;
-        mediaRecorder.requestData();
-        mediaRecorder.stop();
-      }
+      if (elapsed >= SILENCE_MS) submitCurrentRecording();
+      else if (recordingElapsed >= MAX_RECORDING_MS) submitCurrentRecording();
     }
   }, VAD_INTERVAL_MS);
+}
+
+function submitCurrentRecording() {
+  if (phase !== 'listening' || mediaRecorder?.state !== 'recording') return;
+  silenceBarEl.hidden = true;
+  setPhase('processing');
+  mediaRecorder.requestData();
+  mediaRecorder.stop();
 }
 
 // ── Submit audio → STT → LLM ─────────────────────────────────────────────────
