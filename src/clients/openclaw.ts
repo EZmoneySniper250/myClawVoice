@@ -5,8 +5,9 @@ export type ChatMessage = {
   content: string;
 };
 
-const voiceSystemPrompt =
-  'You are October, Jerry’s private AI assistant. Reply naturally and concisely for a spoken voice conversation.';
+function voiceSystemPrompt(agentName: string) {
+  return `You are ${agentName}, a personal AI voice assistant. Reply naturally and concisely for a spoken voice conversation.`;
+}
 
 export async function probeOpenClaw() {
   const base = config.openclaw.baseUrl.replace(/\/$/, '');
@@ -65,10 +66,12 @@ export async function streamOpenClaw(
   userText: string,
   history: ChatMessage[] = [],
   onDelta: (delta: string) => void | Promise<void>,
+  signal?: AbortSignal,
 ) {
   const base = config.openclaw.baseUrl.replace(/\/$/, '');
   const res = await fetch(`${base}/v1/chat/completions`, {
     method: 'POST',
+    signal,
     headers: {
       ...authHeaders(),
       accept: 'text/event-stream',
@@ -122,7 +125,7 @@ export async function streamOpenClaw(
 
 function buildMessages(userText: string, history: ChatMessage[]) {
   return [
-    { role: 'system', content: voiceSystemPrompt },
+    { role: 'system', content: voiceSystemPrompt(config.agentName) },
     ...history.slice(-8),
     { role: 'user', content: userText },
   ];

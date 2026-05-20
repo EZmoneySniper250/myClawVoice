@@ -6,8 +6,9 @@ const msgVariants = {
   animate: { opacity: 1, y: 0,  scale: 1,    transition: { duration: 0.28 } },
 };
 
-export function Chat({ transcript, currentResponse }) {
-  const bottomRef = useRef(null);
+export function Chat({ transcript, currentResponse, agentName = 'October' }) {
+  const bottomRef   = useRef(null);
+  const agentKey    = agentName.toLowerCase();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -18,22 +19,25 @@ export function Chat({ transcript, currentResponse }) {
   return (
     <div className="chat-panel">
       <AnimatePresence initial={false}>
-        {transcript.map((msg, i) => (
-          <motion.div
-            key={i}
-            className={`msg ${msg.role}`}
-            variants={msgVariants}
-            initial="initial"
-            animate="animate"
-          >
-            <div className="msg-bubble">{msg.text}</div>
-          </motion.div>
-        ))}
+        {transcript.map((msg, i) => {
+          const isAgent = msg.role !== 'user';
+          return (
+            <motion.div
+              key={i}
+              className={`msg ${isAgent ? 'agent' : 'user'}`}
+              variants={msgVariants}
+              initial="initial"
+              animate="animate"
+            >
+              <div className="msg-bubble">{msg.text}</div>
+            </motion.div>
+          );
+        })}
 
         {currentResponse && (
           <motion.div
             key="streaming"
-            className="msg october"
+            className="msg agent"
             variants={msgVariants}
             initial="initial"
             animate="animate"

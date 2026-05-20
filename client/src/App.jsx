@@ -4,14 +4,8 @@ import { useCall } from './hooks/useCall.js';
 import { OrbScene } from './components/OrbScene.jsx';
 import { Chat } from './components/Chat.jsx';
 import { HUD } from './components/HUD.jsx';
+import { HistorySidebar } from './components/HistorySidebar.jsx';
 import { ThemePicker, applyTheme, getSavedTheme } from './components/ThemePicker.jsx';
-
-const STATUS_LABELS = {
-  idle:       '连接中…',
-  listening:  '正在聆听…',
-  processing: '思考中…',
-  responding: 'October 说话中…',
-};
 
 export default function App() {
   const {
@@ -20,14 +14,17 @@ export default function App() {
     currentResponse,
     silenceProgress,
     rmsLevelRef,
+    agentName,
+    agentAvatar,
     startCall,
     hangUp,
     forceListen,
     sendText,
   } = useCall();
 
-  const [input, setInput]       = useState('');
-  const [orbColor, setOrbColor] = useState(() => getSavedTheme().primary);
+  const [input, setInput]           = useState('');
+  const [orbColor, setOrbColor]     = useState(() => getSavedTheme().primary);
+  const [sidebarOpen, setSidebar]   = useState(false);
   const inCall = phase !== 'idle';
 
   // Apply saved theme + auto-start call on mount
@@ -37,6 +34,13 @@ export default function App() {
     setOrbColor(theme.primary);
     startCall(); // eslint-disable-line react-hooks/exhaustive-deps
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const statusLabel = {
+    idle:       '连接中…',
+    listening:  '正在聆听…',
+    processing: '思考中…',
+    responding: `${agentName} 说话中…`,
+  }[phase] ?? '';
 
   const onOrbClick = () => {
     if (phase === 'idle') startCall();
@@ -53,20 +57,26 @@ export default function App() {
 
   return (
     <div className="app">
-      <HUD phase={phase} />
+      <HUD phase={phase} agentName={agentName} />
 
-      <div className="orb-section">
+      <HistorySidebar
+        open={sidebarOpen}
+        onClose={() => setSidebar(false)}
+        agentName={agentName}
+      />
+
+      {/* ── Compact agent section ── */}
+      <div className="agent-section">
         <OrbScene
           phase={phase}
           rmsLevelRef={rmsLevelRef}
           onOrbClick={onOrbClick}
           orbColor={orbColor}
+          avatarUrl={agentAvatar}
         />
-      </div>
 
-      <div className="info-section">
-        <div className="orb-name">OCTOBER</div>
-        <div className="orb-status">{STATUS_LABELS[phase]}</div>
+        <div className="agent-name">{agentName.toUpperCase()}</div>
+        <div className="agent-status">{statusLabel}</div>
 
         <AnimatePresence>
           {phase === 'listening' && silenceProgress > 0 && (
@@ -85,9 +95,22 @@ export default function App() {
         </AnimatePresence>
       </div>
 
-      <Chat transcript={transcript} currentResponse={currentResponse} />
+      <Chat transcript={transcript} currentResponse={currentResponse} agentName={agentName} />
 
+      {/* ── Input bar ── */}
       <div className="input-bar">
+        <button
+          className="btn-archive"
+          onClick={() => setSidebar(o => !o)}
+          title="聊天记录"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="3" width="20" height="4" rx="1" />
+            <path d="M4 7v12a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7" />
+            <path d="M10 12h4" />
+          </svg>
+        </button>
+
         <form className="text-form" onSubmit={onSubmit}>
           <input
             className="text-input"

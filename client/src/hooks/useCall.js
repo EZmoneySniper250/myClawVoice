@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 const VOICE_THRESHOLD     = 0.015;
 const INTERRUPT_THRESHOLD = 0.05;   // higher bar to interrupt October
 const INTERRUPT_TICKS     = 3;      // must sustain for 3 × 80ms = 240ms
-const SILENCE_MS      = 3000;   // 3s silence → auto-submit
+const SILENCE_MS      = 1000;   // 1s silence → auto-submit
 const VAD_INTERVAL_MS = 80;
 const MIN_AUDIO_BYTES = 2048;
 
@@ -34,6 +34,8 @@ export function useCall() {
   const [transcript, setTranscript]     = useState([]);
   const [currentResponse, setCurrent]   = useState('');
   const [silenceProgress, setSilence]   = useState(0);
+  const [agentName, setAgentName]       = useState('October');
+  const [agentAvatar, setAgentAvatar]   = useState('');
 
   // ── Single mutable ref bucket (safe in async callbacks via r.current) ──
   const r = useRef({
@@ -53,6 +55,8 @@ export function useCall() {
     vadTimer:         null,
     ttsMode:          'mock',
     interruptCount:   0,
+    agentName:        'October',
+    agentAvatar:      '',
   });
 
   // Exposed to OrbScene for animation — updated in VAD, never triggers re-renders
@@ -164,6 +168,7 @@ export function useCall() {
           r.current.interruptCount += 1;
           if (r.current.interruptCount >= INTERRUPT_TICKS) {
             r.current.interruptCount = 0;
+            sendInterrupt();
             stopPlayback();
             syncPhase('listening');
             initRecorder();
@@ -215,7 +220,7 @@ export function useCall() {
         return;
       }
 
-      setTranscript(prev => [...prev, { role: 'user', text }]);
+      setTranscript(prev => [...prev, { role: 'user', text, timestamp: Date.now() }]);
       sendViaWS(text);
     } catch (err) {
       console.error('STT error:', err);
@@ -246,7 +251,11 @@ export function useCall() {
         try { msg = JSON.parse(ev.data); } catch { return; }
 
         if (msg.type === 'ready') {
-          r.current.ttsMode = msg.ttsMode || 'mock';
+          r.current.ttsMode    = msg.ttsMode    || 'mock';
+          r.current.agentName  = msg.agentName  || 'October';
+          r.current.agentAvatar = msg.agentAvatar || '';
+          setAgentName(msg.agentName  || 'October');
+          setAgentAvatar(msg.agentAvatar || '');
         }
         else if (msg.type === 'history') {
           // Restore persisted chat history on connect
@@ -266,7 +275,7 @@ export function useCall() {
         }
         else if (msg.type === 'chat_done') {
           const answer = msg.answer || '';
-          setTranscript(prev => [...prev, { role: 'october', text: answer }]);
+          setTranscript(prev => [...prev, { role: r.current.agentName.toLowerCase(), text: answer, timestamp: Date.now() }]);
           setCurrent('');
 
           if (r.current.ttsMode !== 'doubao' && r.current.ttsMode !== 'elevenlabs') {
@@ -344,7 +353,15 @@ export function useCall() {
     syncPhase('idle');
   }
 
+  function sendInterrupt() {
+    const ws = r.current.ws;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'interrupt' }));
+    }
+  }
+
   function forceListen() {
+    sendInterrupt();
     stopPlayback();
     if (r.current.hasCaptured && r.current.recorder?.state === 'recording') {
       r.current.recorder.requestData();
@@ -357,7 +374,7 @@ export function useCall() {
 
   function sendText(text) {
     if (!text.trim()) return;
-    setTranscript(prev => [...prev, { role: 'user', text }]);
+    setTranscript(prev => [...prev, { role: 'user', text, timestamp: Date.now() }]);
     sendViaWS(text);
     if (r.current.phase !== 'idle') syncPhase('processing');
   }
@@ -368,6 +385,8 @@ export function useCall() {
     currentResponse,
     silenceProgress,
     rmsLevelRef,
+    agentName,
+    agentAvatar,
     startCall,
     hangUp,
     forceListen,

@@ -5,6 +5,8 @@ dotenv.config({ override: true });
 export const config = {
   host: process.env.HOST || '127.0.0.1',
   port: Number(process.env.PORT || 8787),
+  agentName:   process.env.AGENT_NAME   || 'October',
+  agentAvatar: process.env.AGENT_AVATAR || '',
   openclaw: {
     baseUrl: process.env.OPENCLAW_BASE_URL || 'http://127.0.0.1:18789',
     apiKey: process.env.OPENCLAW_API_KEY || '',
@@ -16,6 +18,7 @@ export const config = {
     mode: process.env.STT_MODE || 'mock',
     pythonBin: process.env.PYTHON_BIN || 'python',
     whisperModel: process.env.WHISPER_MODEL || 'small',
+    funasrModel: process.env.FUNASR_MODEL || 'paraformer-zh',
     language: process.env.WHISPER_LANGUAGE || 'zh',
     beamSize: Number(process.env.WHISPER_BEAM_SIZE || 1),
   },

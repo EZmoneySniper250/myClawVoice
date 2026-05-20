@@ -3,7 +3,11 @@ import Redis from 'ioredis';
 const HISTORY_KEY = 'myvoice:messages';
 const MAX_STORED  = 500;
 
-export type StoredMessage = { role: 'user' | 'assistant'; content: string };
+export type StoredMessage = {
+  role:       'user' | 'assistant';
+  content:    string;
+  timestamp?: number;
+};
 
 function makeClient(): Redis | null {
   try {
@@ -32,16 +36,27 @@ export async function loadRecent(count = 50): Promise<StoredMessage[]> {
   }
 }
 
+export async function loadAll(limit = 300): Promise<StoredMessage[]> {
+  if (!client) return [];
+  try {
+    const items = await client.lrange(HISTORY_KEY, -limit, -1);
+    return items.map(s => JSON.parse(s) as StoredMessage);
+  } catch {
+    return [];
+  }
+}
+
 export async function appendMessages(
   userText: string,
   assistantText: string,
 ): Promise<void> {
   if (!client) return;
+  const ts = Date.now();
   try {
     await client.rpush(
       HISTORY_KEY,
-      JSON.stringify({ role: 'user',      content: userText      }),
-      JSON.stringify({ role: 'assistant', content: assistantText }),
+      JSON.stringify({ role: 'user',      content: userText,      timestamp: ts }),
+      JSON.stringify({ role: 'assistant', content: assistantText, timestamp: ts }),
     );
     await client.ltrim(HISTORY_KEY, -MAX_STORED, -1);
   } catch {

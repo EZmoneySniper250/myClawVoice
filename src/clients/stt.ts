@@ -20,8 +20,8 @@ let worker: WorkerState | null = null;
 let nextRequestId = 1;
 
 export async function transcribeAudio(filePath: string): Promise<string> {
-  if (config.stt.mode !== 'faster-whisper') {
-    return '[mock transcription] 请把 STT_MODE=faster-whisper 并安装 faster-whisper 后再语音识别。';
+  if (config.stt.mode !== 'faster-whisper' && config.stt.mode !== 'funasr') {
+    return '[mock transcription] 请把 STT_MODE=faster-whisper 或 STT_MODE=funasr 并安装对应库后再语音识别。';
   }
 
   const { size } = fs.statSync(filePath);
@@ -59,18 +59,14 @@ export async function transcribeAudio(filePath: string): Promise<string> {
 function getWorker(): WorkerState {
   if (worker && !worker.child.killed) return worker;
 
-  const script = path.resolve('stt', 'worker.py');
+  const isFunasr = config.stt.mode === 'funasr';
+  const script = path.resolve('stt', isFunasr ? 'worker_funasr.py' : 'worker.py');
+  const scriptArgs = isFunasr
+    ? ['--model', config.stt.funasrModel]
+    : ['--model', config.stt.whisperModel, '--language', config.stt.language, '--beam-size', String(config.stt.beamSize)];
   const child = spawn(
     config.stt.pythonBin,
-    [
-      script,
-      '--model',
-      config.stt.whisperModel,
-      '--language',
-      config.stt.language,
-      '--beam-size',
-      String(config.stt.beamSize),
-    ],
+    [script, ...scriptArgs],
     {
       cwd: process.cwd(),
       env: {

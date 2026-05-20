@@ -13,7 +13,8 @@ function formatTime() {
   return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 }
 
-export function HUD({ phase }) {
+export function HUD({ phase, agentName = 'October' }) {
+  const tag = agentName.slice(0, 3).toUpperCase();
   return (
     <div className="hud" aria-hidden="true">
       <div className="hud-corner hud-tl" />
@@ -27,7 +28,7 @@ export function HUD({ phase }) {
       </div>
 
       <div className="hud-readout hud-tr-text">
-        <div>OCT · v2.1</div>
+        <div>{tag} · v2.1</div>
         <div><Clock /></div>
       </div>
     </div>

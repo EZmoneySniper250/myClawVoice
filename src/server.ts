@@ -9,7 +9,7 @@ import { transcribeAudio } from './clients/stt.js';
 import { synthesizeSpeech } from './clients/tts.js';
 import { DoubaoRealtimeTtsSession, type RealtimeTtsEvent } from './clients/doubaoRealtimeTts.js';
 import { ElevenLabsTtsSession } from './clients/elevenlabsTts.js';
-import { loadRecent, appendMessages } from './clients/redis.js';
+import { loadRecent, loadAll, appendMessages } from './clients/redis.js';
 
 const app = express();
 const uploadDir = path.resolve('uploads');
@@ -30,10 +30,28 @@ app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
     service: 'myvoice',
+    agentName:    config.agentName,
+    agentAvatar:  config.agentAvatar,
     openclawSession: config.openclaw.sessionKey,
     ttsMode: config.tts.mode,
     ttsStreaming: config.tts.mode === 'doubao' || config.tts.mode === 'elevenlabs',
   });
+});
+
+app.get('/api/history', async (_req, res) => {
+  try {
+    const msgs = await loadAll(300);
+    const agentKey = config.agentName.toLowerCase();
+    res.json({
+      messages: msgs.map(m => ({
+        role:      m.role === 'assistant' ? agentKey : m.role,
+        text:      m.content,
+        timestamp: m.timestamp,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 app.post('/api/chat/text', async (req, res) => {
@@ -84,7 +102,7 @@ app.post('/api/chat/audio', upload.single('audio'), async (req, res) => {
 
 // SPA fallback — only when React build exists
 if (fs.existsSync(clientDist)) {
-  app.get('*', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
+  app.use((_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
 }
 
 const server = app.listen(config.port, config.host, () => {
@@ -93,9 +111,20 @@ const server = app.listen(config.port, config.host, () => {
   console.log(`TTS mode: ${config.tts.mode}`);
 });
 
+// Per-connection abort controller — cancelled on interrupt or new request
+const controllers = new WeakMap<WebSocket, AbortController>();
+
 const wss = new WebSocketServer({ server, path: '/ws' });
 wss.on('connection', (ws) => {
-  send(ws, { type: 'ready', sessionKey: config.openclaw.sessionKey, ttsMode: config.tts.mode });
+  controllers.set(ws, new AbortController());
+  const agentKey = config.agentName.toLowerCase();
+  send(ws, {
+    type:        'ready',
+    sessionKey:  config.openclaw.sessionKey,
+    ttsMode:     config.tts.mode,
+    agentName:   config.agentName,
+    agentAvatar: config.agentAvatar,
+  });
 
   // Load persisted history: populate LLM context (if empty) + send to client for display
   loadRecent(60).then(msgs => {
@@ -106,8 +135,9 @@ wss.on('connection', (ws) => {
     send(ws, {
       type: 'history',
       messages: msgs.map(m => ({
-        role: m.role === 'assistant' ? 'october' : m.role,
-        text: m.content,
+        role:      m.role === 'assistant' ? agentKey : m.role,
+        text:      m.content,
+        timestamp: m.timestamp,
       })),
     });
   }).catch(() => {});
@@ -121,13 +151,27 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    if (message.type === 'chat_text') {
-      await handleStreamingTextChat(ws, String(message.text || '').trim());
+    if (message.type === 'interrupt') {
+      controllers.get(ws)?.abort();
+      controllers.set(ws, new AbortController());
+      return;
     }
+
+    if (message.type === 'chat_text') {
+      // Abort any in-flight generation before starting the new one
+      controllers.get(ws)?.abort();
+      const ctrl = new AbortController();
+      controllers.set(ws, ctrl);
+      await handleStreamingTextChat(ws, String(message.text || '').trim(), ctrl.signal);
+    }
+  });
+
+  ws.on('close', () => {
+    controllers.get(ws)?.abort();
   });
 });
 
-async function handleStreamingTextChat(ws: WebSocket, text: string) {
+async function handleStreamingTextChat(ws: WebSocket, text: string, signal: AbortSignal) {
   if (!text) {
     send(ws, { type: 'error', error: 'Missing text.' });
     return;
@@ -142,18 +186,22 @@ async function handleStreamingTextChat(ws: WebSocket, text: string) {
     await tts.connect();
 
     answer = await streamOpenClaw(text, history, async (delta) => {
+      if (signal.aborted) return;
       send(ws, { type: 'chat_delta', delta });
       await chunker.push(delta);
-    });
+    }, signal);
+
+    if (signal.aborted) return;
 
     await chunker.flush();
     await tts.done();
     remember(text, answer);
     send(ws, { type: 'chat_done', answer });
   } catch (err) {
+    if ((err as any)?.name === 'AbortError') return;
     send(ws, { type: 'error', error: String((err as Error).message || err) });
   } finally {
-    setTimeout(() => tts.close(), 2000);
+    setTimeout(() => tts.close(), 500);
   }
 }
 
@@ -179,7 +227,7 @@ function createSpeechChunker(onChunk: (chunk: string) => Promise<void>) {
       while (true) {
         const index = [...buffer].findIndex((char) => boundary.test(char));
         if (index < 0) {
-          if (buffer.length >= (config.tts.mode === 'elevenlabs' ? 72 : 36)) {
+          if (buffer.length >= (config.tts.mode === 'elevenlabs' ? 30 : 36)) {
             await onChunk(buffer);
             buffer = '';
           }
