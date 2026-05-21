@@ -1,8 +1,6 @@
 ﻿import { useState, useRef, useEffect } from 'react';
 
-const VOICE_THRESHOLD     = 0.025;
-const INTERRUPT_THRESHOLD = 0.09;   // must be loud speech, not background noise
-const INTERRUPT_TICKS     = 7;      // must sustain for 7 脳 80ms = 560ms
+const VOICE_THRESHOLD = 0.025;
 const SILENCE_MS      = 1600;   // silence before auto-submit
 const VAD_INTERVAL_MS = 80;
 const MIN_AUDIO_BYTES = 2048;
@@ -72,7 +70,6 @@ export function useCall() {
     vadTimer:         null,
     preRoll:          [],   // circular pre-VAD audio buffer
     ttsMode:          'mock',
-    interruptCount:   0,
     agentName:        'October',
     idleTimer:        null,
     idleWarnTimer:    null,
@@ -236,26 +233,8 @@ export function useCall() {
       const rms = calcRms(vadData);
       rmsLevelRef.current = rms;
 
-      // Interrupt October only after sustained speech
-      if (p === 'responding') {
-        if (rms > INTERRUPT_THRESHOLD) {
-          r.current.interruptCount += 1;
-          if (r.current.interruptCount >= INTERRUPT_TICKS) {
-            r.current.interruptCount = 0;
-            r.current.returnGen++;  // cancel pending return-to-listening
-            sendInterrupt();
-            stopPlayback();
-            syncPhase('listening');
-            initRecorder();
-            r.current.hasCaptured    = true;
-        if (!r.current.voiceStartedAt) r.current.voiceStartedAt = Date.now();
-        r.current.lastVoiceTime  = Date.now();
-          }
-        } else {
-          r.current.interruptCount = 0;
-        }
-        return;
-      }
+      // During responding, wait for playback to finish — manual interrupt only
+      if (p === 'responding') return;
 
       if (rms > VOICE_THRESHOLD) {
         // Recorder already running from initRecorder() 鈥?just mark voice detected
