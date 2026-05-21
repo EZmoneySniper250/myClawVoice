@@ -16,7 +16,7 @@ const uploadDir = path.resolve('uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const upload = multer({ dest: uploadDir });
-const minAudioBytes = 2048;
+const minAudioBytes = 800;
 const history: ChatMessage[] = [];
 
 app.use(express.json({ limit: '2mb' }));
@@ -67,15 +67,22 @@ app.post('/api/chat/text', async (req, res) => {
 });
 
 app.post('/api/transcribe/audio', upload.single('audio'), async (req, res) => {
+  console.log(`[transcribe] received: file=${req.file?.originalname} size=${req.file?.size ?? '?'} mime=${req.file?.mimetype}`);
   try {
-    if (!req.file) return res.status(400).json({ error: 'Missing audio file' });
+    if (!req.file) {
+      console.log('[transcribe] reject: no file');
+      return res.status(400).json({ error: 'Missing audio file' });
+    }
     if (req.file.size < minAudioBytes) {
+      console.log(`[transcribe] reject: too small (${req.file.size} < ${minAudioBytes})`);
       return res.status(400).json({ error: 'Audio recording is too short or contains no audio. Hold the mic a little longer and try again.' });
     }
     const inputText = await transcribeAudio(req.file.path);
+    console.log(`[transcribe] result: text=${JSON.stringify(inputText)}`);
     if (!inputText) return res.status(400).json({ error: 'No speech detected. Please try again.' });
     res.json({ inputText });
   } catch (err) {
+    console.error('[transcribe] error:', err);
     res.status(500).json({ error: String((err as Error).message || err) });
   } finally {
     if (req.file) fs.unlink(req.file.path, () => {});
@@ -246,9 +253,18 @@ function createSpeechChunker(onChunk: (chunk: string) => Promise<void>) {
   };
 }
 
+class MockTtsSession {
+  constructor(private readonly emit: (event: RealtimeTtsEvent) => void) {}
+  async connect() {}
+  async append(_text: string) {}
+  async done() { this.emit({ type: 'tts_done' }); }
+  close() {}
+}
+
 function createTtsSession(emit: (event: RealtimeTtsEvent) => void) {
   if (config.tts.mode === 'elevenlabs') return new ElevenLabsTtsSession(emit);
-  return new DoubaoRealtimeTtsSession(emit);
+  if (config.tts.mode === 'doubao') return new DoubaoRealtimeTtsSession(emit);
+  return new MockTtsSession(emit);
 }
 
 function send(ws: WebSocket, payload: unknown) {

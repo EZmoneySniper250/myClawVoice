@@ -61,7 +61,7 @@ def transcribe(model, audio_file, language, beam_size):
         language=language,
         vad_filter=False,
         beam_size=beam_size,
-        no_speech_threshold=0.8,
+        no_speech_threshold=0.5,
         initial_prompt=prompt,
     )
     return "".join(segment.text for segment in segments).strip()

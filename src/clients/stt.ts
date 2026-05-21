@@ -25,7 +25,7 @@ export async function transcribeAudio(filePath: string): Promise<string> {
   }
 
   const { size } = fs.statSync(filePath);
-  if (size < 2048) {
+  if (size < 800) {
     throw new Error('Audio recording is too short or contains no audio. Hold the mic a little longer and try again.');
   }
 

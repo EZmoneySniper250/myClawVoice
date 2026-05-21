@@ -21,8 +21,9 @@ RUN npm run build
 FROM node:20-slim
 
 # 安装 Python（STT 语音识别子进程所需）及 ffmpeg（音频处理）
+# python-is-python3 提供 `python` → `python3` 软链接，兼容 PYTHON_BIN=python 的配置
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip ffmpeg \
+    python3 python3-pip python-is-python3 ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
 # 安装 faster-whisper（若使用 STT_MODE=faster-whisper）
@@ -49,5 +50,8 @@ COPY public/ ./public/
 COPY stt/ ./stt/
 
 EXPOSE 8787
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:8787/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
 CMD ["node", "dist/server.js"]
