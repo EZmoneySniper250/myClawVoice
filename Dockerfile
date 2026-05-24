@@ -26,12 +26,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python-is-python3 ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
-# 安装 faster-whisper（若使用 STT_MODE=faster-whisper）
-# 如不需要语音识别可注释掉以减小镜像体积
-RUN pip3 install faster-whisper --break-system-packages
-
-# 若需要 FunASR（STT_MODE=funasr），改为：
-# RUN pip3 install funasr modelscope --break-system-packages
+# 安装 FunASR（STT_MODE=funasr）
+# 先装 CPU 版 PyTorch（无 GPU 环境，体积比完整版小很多）
+# 若改用 faster-whisper，替换这两行为：pip3 install faster-whisper
+RUN pip3 install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --break-system-packages
+RUN pip3 install funasr modelscope --break-system-packages
 
 WORKDIR /app
 

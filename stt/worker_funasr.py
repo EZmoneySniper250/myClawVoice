@@ -19,7 +19,7 @@ def main():
         return 2
 
     try:
-        model = AutoModel(model=args.model, disable_update=True)
+        model = AutoModel(model=args.model, trust_remote_code=True, disable_update=True)
     except Exception as exc:
         write_message({"type": "fatal", "error": f"Failed to load FunASR model '{args.model}': {exc}"})
         return 2

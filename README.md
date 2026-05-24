@@ -115,8 +115,14 @@ docker compose down -v
 | `OPENCLAW_MODEL` | `openclaw/default` | 使用的模型 |
 | `OPENCLAW_SESSION_KEY` | `myvoice-october` | 对话隔离 session 标识 |
 | `REDIS_URL` | `redis://localhost:6379` | Redis 连接地址（Docker 内已自动设置）|
-| `STT_MODE` | `mock` | 语音识别模式 |
-| `TTS_MODE` | `mock` | 语音合成模式 |
+| `STT_MODE` | `mock` | 语音识别模式：`mock` / `faster-whisper` / `funasr` |
+| `PYTHON_BIN` | `python` | STT 子进程使用的 Python 路径，建议指向 conda 环境 |
+| `WHISPER_MODEL` | `small` | faster-whisper 模型大小 |
+| `WHISPER_LANGUAGE` | `zh` | 识别语言 |
+| `WHISPER_BEAM_SIZE` | `1` | 1 最快，5 最准 |
+| `FUNASR_MODEL` | `paraformer-zh` | FunASR 模型 ID，如 `iic/SenseVoiceSmall` |
+| `MODELSCOPE_CACHE` | `~/.cache/modelscope` | FunASR 模型缓存目录（本地开发可指向 D 盘） |
+| `TTS_MODE` | `mock` | 语音合成模式：`mock` / `elevenlabs` / `doubao` |
 
 ---
 
@@ -150,10 +156,34 @@ WHISPER_BEAM_SIZE=1        # 1 为最快，5 为最准
 
 ```env
 STT_MODE=funasr
-FUNASR_MODEL=paraformer-zh
+FUNASR_MODEL=iic/SenseVoiceSmall   # 多语言，速度快（推荐）
+# FUNASR_MODEL=paraformer-zh       # 纯中文，精度高
+# FUNASR_MODEL=paraformer-en       # 英文
 ```
 
-> 使用 FunASR 需在 `Dockerfile` 中将 `faster-whisper` 替换为 `funasr modelscope` 并重新构建。
+模型 ID 格式为 `iic/<模型名>`，首次启动会自动从 ModelScope 下载，之后从本地缓存加载。
+
+**本地开发 — 推荐用 conda 管理 Python 环境**
+
+FunASR 依赖较多，Python 3.13 部分包暂无预编译 wheel，建议用 conda 创建 3.12 环境：
+
+```bash
+conda create -n myvoice python=3.12
+conda activate myvoice
+pip install funasr modelscope
+```
+
+然后在 `.env` 中将 `PYTHON_BIN` 指向该环境的 Python：
+
+```env
+# Windows
+PYTHON_BIN=C:\Users\<你的用户名>\anaconda3\envs\myvoice\python.exe
+
+# macOS / Linux
+PYTHON_BIN=/opt/anaconda3/envs/myvoice/bin/python
+```
+
+> **Docker 用户：** 需在 `Dockerfile` 中将 `faster-whisper` 替换为 `funasr modelscope` 并重新构建。`docker-compose.yml` 已自动覆盖 `PYTHON_BIN=python`（容器内系统 Python）和 ModelScope 缓存路径，无需手动配置。
 
 ---
 
@@ -185,6 +215,52 @@ ELEVENLABS_API_KEY=...
 ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb
 ELEVENLABS_MODEL_ID=eleven_multilingual_v2
 ```
+
+### 已知问题：长回复可能不继续出声
+
+2026-05-24 语音测试发现：当 October 的回复超过一定长度时，前端文字可能仍能显示/模型仍在生成，但后续语音不一定会继续播放出来。
+
+当前初步判断不是单纯的 LLM 理解问题，而是 **流式 LLM 与 ElevenLabs TTS 串行耦合** 导致的长回复瓶颈：
+
+```text
+OpenClaw 流式生成 delta
+  → createSpeechChunker 切句/按长度切段
+  → await tts.append(chunk)
+  → ElevenLabs 合成该段音频
+  → emit tts_audio 给浏览器播放
+  → 再继续处理后续 delta
+```
+
+关键代码位置：
+
+- `src/server.ts`
+  - `handleStreamingTextChat(...)`
+  - `createSpeechChunker(...)`
+- `src/clients/elevenlabsTts.ts`
+  - `ElevenLabsTtsSession.append(...)`
+- `public/call.js`
+  - `playPcm(...)`
+  - `scheduleReturnToListening(...)`
+
+风险点：
+
+- `handleStreamingTextChat` 在 OpenClaw delta 回调里 `await chunker.push(delta)`。
+- `chunker.push` 触发分段后会 `await onChunk(chunk)`。
+- ElevenLabs `append` 内部排队后仍 `await this.queue`，等于 TTS 合成会反压/阻塞 LLM stream 的持续消费。
+- `streamOpenClaw` 当前有约 `120_000ms` timeout；长回复 + 慢 TTS 可能导致后半段被断尾。
+- 前端 `call.js` 在 `tts_done` / `chat_done` 后会按 `nextPlayTime` 安排回到 listening；如果服务端提前 done、TTS error、或音频队列与状态不同步，可能出现“文字有但声音没继续”的体验。
+
+临时规避：
+
+- 语音模式下让助手回复更短、更口语化。
+- 避免一次性要求长段解释；改成分多轮回答。
+
+建议修复方向：
+
+1. **TTS 独立异步队列**：LLM stream 不要等待 ElevenLabs 合成完成；delta 只负责快速写入待播队列。
+2. **服务端完成语义拆分**：保证 `chat_done` 与 `tts_done` 的顺序可靠，只有所有 TTS chunk 合成并发送完后才发 `tts_done`。
+3. **增加日志**：记录每个 chunk 的长度、发送时间、TTS 合成耗时、`tts_audio` 数量、`tts_done` 时间，方便定位是服务端断、ElevenLabs 断，还是浏览器播放断。
+4. **可选：限制语音回复最大长度**：在 voice system prompt 或服务端截断/总结，优先保证实时对话体验。
 
 ---
 

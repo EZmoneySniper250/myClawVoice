@@ -24,9 +24,12 @@ services:
     environment:
       HOST: "0.0.0.0"
       REDIS_URL: "redis://redis:6379"
+      # 覆盖 .env 中的 Windows 路径，容器内使用系统 Python 和 Linux 路径
+      PYTHON_BIN: "python"
+      MODELSCOPE_CACHE: "/root/.cache/modelscope"
     volumes:
-      # 缓存 faster-whisper / HuggingFace 模型，避免每次重建都重新下载
       - whisper_cache:/root/.cache/huggingface
+      - modelscope_cache:/root/.cache/modelscope
     depends_on:
       redis:
         condition: service_healthy
@@ -34,3 +37,4 @@ services:
 volumes:
   redis_data:
   whisper_cache:
+  modelscope_cache:

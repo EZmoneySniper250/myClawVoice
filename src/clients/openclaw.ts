@@ -29,6 +29,7 @@ export async function askOpenClaw(userText: string, history: ChatMessage[] = [])
   const base = config.openclaw.baseUrl.replace(/\/$/, '');
   const res = await fetch(`${base}/v1/chat/completions`, {
     method: 'POST',
+    signal: AbortSignal.timeout(60_000),
     headers: {
       ...authHeaders(),
       'content-type': 'application/json',
@@ -85,7 +86,8 @@ export async function streamOpenClaw(
       messages: buildMessages(userText, history),
     }),
   };
-  if (signal) requestInit.signal = signal;
+  const timeout = AbortSignal.timeout(120_000);
+  requestInit.signal = signal ? AbortSignal.any([signal, timeout]) : timeout;
 
   const res = await fetch(`${base}/v1/chat/completions`, requestInit);
 

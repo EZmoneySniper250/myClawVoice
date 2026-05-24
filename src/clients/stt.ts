@@ -48,7 +48,7 @@ export async function transcribeAudio(filePath: string): Promise<string> {
       sttWorker.child.kill();
       worker = null;
       reject(new Error('STT timeout — Whisper took too long, please try again'));
-    }, 12000);
+    }, 60000);
 
     sttWorker.pending.set(id, {
       resolve: (text) => {
