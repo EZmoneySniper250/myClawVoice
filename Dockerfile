@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 安装 FunASR（STT_MODE=funasr）
 # 先装 CPU 版 PyTorch（无 GPU 环境，体积比完整版小很多）
 # 若改用 faster-whisper，替换这两行为：pip3 install faster-whisper
-RUN pip3 install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --break-system-packages
+RUN pip3 install "torch==2.2.2+cpu" "torchaudio==2.2.2+cpu" --index-url https://download.pytorch.org/whl/cpu --break-system-packages
 RUN pip3 install funasr modelscope --break-system-packages
 
 WORKDIR /app

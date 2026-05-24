@@ -27,6 +27,8 @@ services:
       # 覆盖 .env 中的 Windows 路径，容器内使用系统 Python 和 Linux 路径
       PYTHON_BIN: "python"
       MODELSCOPE_CACHE: "/root/.cache/modelscope"
+      # 容器内 127.0.0.1 是容器自身，需用 host.docker.internal 访问宿主机
+      OPENCLAW_BASE_URL: "http://host.docker.internal:18789"
     volumes:
       - whisper_cache:/root/.cache/huggingface
       - modelscope_cache:/root/.cache/modelscope
